@@ -64,28 +64,40 @@ impl Root {
 }
 
 /// Cargo project root
-pub fn root(cd: Option<&Path>) -> Result<Option<Root>> {
-    #[derive(Deserialize)]
-    struct Manifest {
-        workspace_root: PathBuf,
+pub fn root(cd: Option<&Path>, manifest_path: Option<PathBuf>) -> Result<Option<Root>> {
+    if let Some(manifest_path) = manifest_path {
+        if !manifest_path.is_file() {
+            eyre::bail!("No manifest found at \"{}\"", manifest_path.display());
+        }
+        return Ok(Some(Root {
+            path: manifest_path
+                .parent()
+                .expect("File must have a parent")
+                .to_owned(),
+        }));
+    } else {
+        #[derive(Deserialize)]
+        struct Manifest {
+            workspace_root: PathBuf,
+        }
+        let mut command = std::process::Command::new(
+            std::env::var("CARGO")
+                .ok()
+                .unwrap_or_else(|| "cargo".to_string()),
+        );
+        command
+            .arg("metadata")
+            .arg("--format-version=1")
+            .arg("--no-deps");
+        if let Some(cd) = cd {
+            command.current_dir(cd);
+        }
+        let output = command.output()?;
+        let manifest: Option<Manifest> = serde_json::from_slice(&output.stdout)?;
+        Ok(manifest.map(|m| Root {
+            path: m.workspace_root,
+        }))
     }
-    let mut command = std::process::Command::new(
-        std::env::var("CARGO")
-            .ok()
-            .unwrap_or_else(|| "cargo".to_string()),
-    );
-    command
-        .arg("metadata")
-        .arg("--format-version=1")
-        .arg("--no-deps");
-    if let Some(cd) = cd {
-        command.current_dir(cd);
-    }
-    let output = command.output()?;
-    let manifest: Option<Manifest> = serde_json::from_slice(&output.stdout)?;
-    Ok(manifest.map(|m| Root {
-        path: m.workspace_root,
-    }))
 }
 
 /// Pass-through mode

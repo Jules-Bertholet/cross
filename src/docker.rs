@@ -58,6 +58,7 @@ pub fn run(
     args: &[String],
     target_dir: &Option<PathBuf>,
     root: &Root,
+    docker_root: &Path,
     config: &Config,
     uses_xargo: bool,
     sysroot: &Path,
@@ -89,7 +90,7 @@ pub fn run(
     let cargo_dir = mount_finder.find_mount_path(cargo_dir);
     let xargo_dir = mount_finder.find_mount_path(xargo_dir);
     let target_dir = mount_finder.find_mount_path(target_dir);
-    let host_root = mount_finder.find_mount_path(root);
+    let host_root = mount_finder.find_mount_path(docker_root);
     let mount_root: PathBuf;
     #[cfg(target_os = "windows")]
     {
@@ -247,7 +248,7 @@ pub fn run(
     } else {
         // We do this to avoid clashes with path separators. Windows uses `\` as a path separator on Path::join
         let cwd = &std::env::current_dir()?;
-        let working_dir = Path::new("project").join(cwd.strip_prefix(root)?);
+        let working_dir = Path::new("project").join(cwd.strip_prefix(docker_root)?);
         // No [T].join for OsStr
         let mut mount_wd = std::ffi::OsString::new();
         for part in working_dir.iter() {

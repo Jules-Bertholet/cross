@@ -279,7 +279,7 @@ fn run() -> Result<ExitStatus> {
 
     let version_meta =
         rustc_version::version_meta().wrap_err("couldn't fetch the `rustc` version")?;
-    if let Some(root) = cargo::root(None)? {
+    if let Some(root) = cargo::root(None, args.manifest_path)? {
         let host = version_meta.host();
         let toml = toml(&root)?;
         let config = Config::new(toml);
@@ -386,11 +386,13 @@ fn run() -> Result<ExitStatus> {
                     docker::register(&target, verbose)?
                 }
 
+                let docker_root = env::current_dir()?;
                 return docker::run(
                     &target,
                     &filtered_args,
                     &args.target_dir,
                     &root,
+                    &docker_root,
                     &config,
                     uses_xargo,
                     &sysroot,
