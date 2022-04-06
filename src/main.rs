@@ -279,7 +279,7 @@ fn run() -> Result<ExitStatus> {
 
     let version_meta =
         rustc_version::version_meta().wrap_err("couldn't fetch the `rustc` version")?;
-    if let Some(root) = cargo::root()? {
+    if let Some(root) = cargo::root(None)? {
         let host = version_meta.host();
         let toml = toml(&root)?;
         let config = Config::new(toml);
