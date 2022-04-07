@@ -5,6 +5,7 @@ This project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+- #494 - Parse Cargo's --manifest-path option to determine mounted docker root
 - #629 - Update Android NDK version and API version
 - #681 - Warn on unknown fields and confusable targets
 - #665 - when not using [env.volumes](https://github.com/cross-rs/cross#mounting-volumes-into-the-build-environment), mount project in /project
