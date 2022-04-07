@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 
 use crate::cli::Args;
-use crate::config::Config;
 use crate::errors::*;
 use crate::extensions::CommandExt;
 
@@ -57,12 +56,7 @@ impl<'a> From<&'a str> for Subcommand {
 #[derive(Debug, Deserialize)]
 pub struct CargoMetadata {
     pub workspace_root: PathBuf,
-}
-
-impl CargoMetadata {
-    pub fn workspace_root(&self) -> &Path {
-        &self.workspace_root
-    }
+    pub target_directory: PathBuf,
 }
 
 /// Cargo metadata with specific invocation
@@ -94,14 +88,24 @@ pub fn cargo_metadata_with_args(
                 String::from_utf8(output.stderr)
             )
         })?;
-    Ok(manifest.map(|m| CargoMetadata {
-        workspace_root: m.workspace_root,
-    }))
-}
-
-/// Cargo metadata
-pub fn cargo_metadata(cd: Option<&Path>) -> Result<Option<CargoMetadata>> {
-    cargo_metadata_with_args(cd, None)
+    manifest
+        .map(|m| -> Result<_> {
+            Ok(CargoMetadata {
+                target_directory: args
+                    .and_then(|a| a.target_dir.clone())
+                    .map(|p| {
+                        if p.is_relative() {
+                            cd.expect("this is a bug, working directory should be provided here")
+                                .join(p)
+                        } else {
+                            p
+                        }
+                    })
+                    .unwrap_or(m.target_directory),
+                ..m
+            })
+        })
+        .transpose()
 }
 
 /// Pass-through mode

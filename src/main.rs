@@ -387,11 +387,9 @@ fn run() -> Result<ExitStatus> {
                     docker::register(&target, verbose)?
                 }
 
-                let docker_root = env::current_dir()?;
                 return docker::run(
                     &target,
                     &filtered_args,
-                    &args.target_dir,
                     &metadata,
                     &config,
                     uses_xargo,
@@ -412,7 +410,7 @@ fn run() -> Result<ExitStatus> {
 fn toml(root: &CargoMetadata) -> Result<Option<CrossToml>> {
     let path = match env::var("CROSS_CONFIG") {
         Ok(var) => PathBuf::from(var),
-        Err(_) => root.workspace_root().join("Cross.toml"),
+        Err(_) => root.workspace_root.join("Cross.toml"),
     };
 
     if path.exists() {
@@ -425,7 +423,7 @@ fn toml(root: &CargoMetadata) -> Result<Option<CrossToml>> {
         Ok(Some(config))
     } else {
         // Checks if there is a lowercase version of this file
-        if root.workspace_root().join("cross.toml").exists() {
+        if root.workspace_root.join("cross.toml").exists() {
             eprintln!("There's a file named cross.toml, instead of Cross.toml. You may want to rename it, or it won't be considered.");
         }
         Ok(None)
