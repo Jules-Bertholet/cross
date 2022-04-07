@@ -52,6 +52,7 @@ pub fn register(target: &Target, verbose: bool) -> Result<()> {
         .run(verbose)
 }
 
+#[allow(unused_variables)]
 pub fn mount(cmd: &mut Command, val: &Path, verbose: bool) -> Result<PathBuf> {
     let host_path =
         file::canonicalize(&val).wrap_err_with(|| format!("when canonicalizing path `{val:?}`"))?;
@@ -128,7 +129,7 @@ pub fn run(
     #[cfg(target_os = "windows")]
     {
         // On Windows, we can not mount the directory name directly. Instead, we use wslpath to convert the path to a linux compatible path.
-        mount_cwd = wslpath(&cwd, verbose)?;
+        mount_cwd = wslpath(cwd, verbose)?;
     }
     #[cfg(not(target_os = "windows"))]
     {
