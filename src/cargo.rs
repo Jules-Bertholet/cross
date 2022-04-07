@@ -57,6 +57,40 @@ impl<'a> From<&'a str> for Subcommand {
 pub struct CargoMetadata {
     pub workspace_root: PathBuf,
     pub target_directory: PathBuf,
+    pub packages: Vec<Package>,
+    pub workspace_members: Vec<String>,
+}
+
+impl CargoMetadata {
+    fn non_workspace_members(&self) -> impl Iterator<Item = &Package> {
+        self.packages
+            .iter()
+            .filter(|p| !self.workspace_members.iter().any(|m| m == &p.id))
+    }
+
+    pub fn path_dependencies(&self) -> impl Iterator<Item = &Path> {
+        // TODO: Also filter out things that are in workspace, but not a workspace member
+        self.non_workspace_members().filter_map(|p| p.crate_path())
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Package {
+    id: String,
+    manifest_path: PathBuf,
+    source: Option<String>,
+}
+
+impl Package {
+    /// Returns the absolute path to the packages manifest "folder"
+    fn crate_path(&self) -> Option<&Path> {
+        // when source is none, this package is a path dependency or a workspace member
+        if self.source.is_none() {
+            self.manifest_path.parent()
+        } else {
+            None
+        }
+    }
 }
 
 /// Cargo metadata with specific invocation
@@ -79,6 +113,9 @@ pub fn cargo_metadata_with_args(
         }
     } else {
         command.arg("--no-deps");
+    }
+    if let Some(target) = args.and_then(|a| a.target.as_ref()) {
+        command.args(["--filter-platform", target.triple()]);
     }
     let output = command.output()?;
     let manifest: Option<CargoMetadata> =

@@ -52,6 +52,26 @@ pub fn register(target: &Target, verbose: bool) -> Result<()> {
         .run(verbose)
 }
 
+pub fn mount(cmd: &mut Command, val: &Path, verbose: bool) -> Result<PathBuf> {
+    let host_path =
+        file::canonicalize(&val).wrap_err_with(|| format!("when canonicalizing path `{val:?}`"))?;
+    let mount_path: PathBuf;
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, we can not mount the directory name directly. Instead, we use wslpath to convert the path to a linux compatible path.
+        mount_path = wslpath(&host_path, verbose)?;
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        mount_path = host_path.clone();
+    }
+    cmd.args(&[
+        "-v",
+        &format!("{}:{}", host_path.display(), mount_path.display()),
+    ]);
+    Ok(mount_path)
+}
+
 #[allow(clippy::too_many_arguments)] // TODO: refactor
 pub fn run(
     target: &Target,
@@ -147,36 +167,26 @@ pub fn run(
         // flag forwards the value from the parent shell
         docker.args(&["-e", var]);
     }
-    let mut env_volumes = false;
+    let mut mount_volumes = false;
     // FIXME(emilgardis 2022-04-07): This is a fallback so that if it's hard for use to do mounting logic, make it simple(r)
     // Preferably we would not have to do this.
     if cwd.strip_prefix(&metadata.workspace_root).is_err() {
-        env_volumes = true;
+        mount_volumes = true;
     }
 
     for ref var in config.env_volumes(target)? {
         validate_env_var(var)?;
 
         if let Ok(val) = env::var(var) {
-            let host_path = file::canonicalize(&val)
-                .wrap_err_with(|| format!("when canonicalizing path `{val}`"))?;
-            let mount_path: PathBuf;
-            #[cfg(target_os = "windows")]
-            {
-                // On Windows, we can not mount the directory name directly. Instead, we use wslpath to convert the path to a linux compatible path.
-                mount_path = wslpath(&host_path, verbose)?;
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                mount_path = host_path.clone();
-            }
-            docker.args(&[
-                "-v",
-                &format!("{}:{}", host_path.display(), mount_path.display()),
-            ]);
+            let mount_path = mount(&mut docker, val.as_ref(), verbose)?;
             docker.args(&["-e", &format!("{}={}", var, mount_path.display())]);
-            env_volumes = true;
+            mount_volumes = true;
         }
+    }
+
+    for path in metadata.path_dependencies() {
+        mount(&mut docker, path, verbose)?;
+        mount_volumes = true;
     }
 
     docker.args(&["-e", "PKG_CONFIG_ALLOW_CROSS=1"]);
@@ -232,7 +242,7 @@ pub fn run(
         .args(&["-v", &format!("{}:/cargo:Z", cargo_dir.display())])
         // Prevent `bin` from being mounted inside the Docker container.
         .args(&["-v", "/cargo/bin"]);
-    if env_volumes {
+    if mount_volumes {
         docker.args(&[
             "-v",
             &format!("{}:{}:Z", host_root.display(), mount_root.display()),
@@ -244,7 +254,7 @@ pub fn run(
         .args(&["-v", &format!("{}:/rust:Z,ro", sysroot.display())])
         .args(&["-v", &format!("{}:/target:Z", target_dir.display())]);
 
-    if env_volumes {
+    if mount_volumes {
         docker.args(&["-w".as_ref(), mount_cwd.as_os_str()]);
     } else if mount_cwd == metadata.workspace_root {
         docker.args(&["-w", "/project"]);
