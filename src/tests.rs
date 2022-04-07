@@ -13,10 +13,10 @@ static WORKSPACE: OnceCell<PathBuf> = OnceCell::new();
 pub fn get_cargo_workspace() -> &'static Path {
     let manifest_dir = env!("CARGO_MANIFEST_DIR");
     WORKSPACE.get_or_init(|| {
-        crate::cargo::root(Some(manifest_dir.as_ref()))
+        crate::cargo::cargo_metadata(Some(manifest_dir.as_ref()))
             .unwrap()
             .unwrap()
-            .path
+            .workspace_root
     })
 }
 

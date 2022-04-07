@@ -2,6 +2,8 @@ use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus};
 
+use crate::cli::Args;
+use crate::config::Config;
 use crate::errors::*;
 use crate::extensions::CommandExt;
 
@@ -52,52 +54,54 @@ impl<'a> From<&'a str> for Subcommand {
     }
 }
 
-#[derive(Debug)]
-pub struct Root {
-    pub path: PathBuf,
+#[derive(Debug, Deserialize)]
+pub struct CargoMetadata {
+    pub workspace_root: PathBuf,
 }
 
-impl Root {
-    pub fn path(&self) -> &Path {
-        &self.path
+impl CargoMetadata {
+    pub fn workspace_root(&self) -> &Path {
+        &self.workspace_root
     }
 }
 
-/// Cargo project root
-pub fn root(cd: Option<&Path>, manifest_path: Option<PathBuf>) -> Result<Option<Root>> {
-    if let Some(manifest_path) = manifest_path {
-        if !manifest_path.is_file() {
-            eyre::bail!("No manifest found at \"{}\"", manifest_path.display());
+/// Cargo metadata with specific invocation
+pub fn cargo_metadata_with_args(
+    cd: Option<&Path>,
+    args: Option<&Args>,
+) -> Result<Option<CargoMetadata>> {
+    let mut command = std::process::Command::new(
+        std::env::var("CARGO")
+            .ok()
+            .unwrap_or_else(|| "cargo".to_string()),
+    );
+    command.arg("metadata").arg("--format-version=1");
+    if let Some(cd) = cd {
+        command.current_dir(cd);
+    }
+    if let Some(config) = args {
+        if let Some(ref manifest_path) = config.manifest_path {
+            command.args(["--manifest-path".as_ref(), manifest_path.as_os_str()]);
         }
-        return Ok(Some(Root {
-            path: manifest_path
-                .parent()
-                .expect("File must have a parent")
-                .to_owned(),
-        }));
     } else {
-        #[derive(Deserialize)]
-        struct Manifest {
-            workspace_root: PathBuf,
-        }
-        let mut command = std::process::Command::new(
-            std::env::var("CARGO")
-                .ok()
-                .unwrap_or_else(|| "cargo".to_string()),
-        );
-        command
-            .arg("metadata")
-            .arg("--format-version=1")
-            .arg("--no-deps");
-        if let Some(cd) = cd {
-            command.current_dir(cd);
-        }
-        let output = command.output()?;
-        let manifest: Option<Manifest> = serde_json::from_slice(&output.stdout)?;
-        Ok(manifest.map(|m| Root {
-            path: m.workspace_root,
-        }))
+        command.arg("--no-deps");
     }
+    let output = command.output()?;
+    let manifest: Option<CargoMetadata> =
+        serde_json::from_slice(&output.stdout).wrap_err_with(|| {
+            format!(
+                "{command:?} returned nothing. {:?}",
+                String::from_utf8(output.stderr)
+            )
+        })?;
+    Ok(manifest.map(|m| CargoMetadata {
+        workspace_root: m.workspace_root,
+    }))
+}
+
+/// Cargo metadata
+pub fn cargo_metadata(cd: Option<&Path>) -> Result<Option<CargoMetadata>> {
+    cargo_metadata_with_args(cd, None)
 }
 
 /// Pass-through mode
